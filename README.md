@@ -1,2 +1,2 @@
 # Campusconnect
-Connect with your college pears having same interest
+Connect with your college peers having same interest
