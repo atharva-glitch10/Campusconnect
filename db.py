@@ -15,16 +15,20 @@ def get_connection():
 
 # ── User operations ──────────────────────────────────────────
 
-def add_user(name: str):
-    """Insert a new user. Returns a status dict."""
+def add_user(name: str, email: str = "", phone: str = ""):
+    """Insert or update a user. Returns a status dict."""
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (name) VALUES (%s)", (name,))
+        cursor.execute("""
+            INSERT INTO users (name, email, phone) 
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE email=%s, phone=%s
+        """, (name, email, phone, email, phone))
         conn.commit()
-        return {"status": f"User '{name}' added successfully"}
-    except mysql.connector.IntegrityError:
-        return {"status": "User already exists"}
+        return {"status": f"User '{name}' added/updated successfully"}
+    except mysql.connector.Error as e:
+        return {"status": str(e)}
     finally:
         cursor.close()
         conn.close()
@@ -83,13 +87,13 @@ def add_interest(user: str, interest: str):
 
 def get_users_with_interests():
     """
-    Return a dict:  { username: [interest1, interest2, ...], ... }
+    Return a dict:  { username: {"email": str, "phone": str, "interests": [interest1, ...]}, ... }
     Used by the matching algorithm.
     """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT u.name, i.name
+        SELECT u.name, u.email, u.phone, i.name
         FROM users u
         LEFT JOIN user_interests ui ON u.user_id = ui.user_id
         LEFT JOIN interests i      ON ui.interest_id = i.interest_id
@@ -99,11 +103,12 @@ def get_users_with_interests():
     cursor.close()
     conn.close()
 
-    data: dict[str, list[str]] = {}
-    for user_name, interest_name in rows:
-        data.setdefault(user_name, [])
+    data = {}
+    for user_name, email, phone, interest_name in rows:
+        if user_name not in data:
+            data[user_name] = {"email": email or "", "phone": phone or "", "interests": []}
         if interest_name:
-            data[user_name].append(interest_name)
+            data[user_name]["interests"].append(interest_name)
     return data
 
 
